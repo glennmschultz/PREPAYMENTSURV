@@ -1,0 +1,41 @@
+
+require(survminer)
+require(survival)
+require(stargazer)
+require(dplyr)
+require(data.table)
+require(ggplot2)
+
+options(contrasts = c("contr.treatment", "contr.treatment"))
+FNMA$SEASON <- as.factor(FNMA$SEASON)
+FNMA <- within(FNMA, SEASON <- relevel(SEASON, ref = 1))
+FNMA$SEASON <- factor(FNMA$SEASON, levels = c("Januar", "Februar", "März", "April", "Mai", "Juni","Juli","August","September","Oktober","November","Dezember"))
+FNMA$OPTION <- (FNMA$ORIG_RT-FNMA$MINTEREST)
+FNMA[, OPTION.LAG1:=c(NA, OPTION[-.N]), by=LOAN_ID]
+
+breaks<- seq(-.5,1.75,0.25)
+breaklabel<- c("-0.5","-0.25","0","0.25","0.5","0.75","1","1.25","1.5","1.75")
+FNMA$OPTION.GLENN <- round(FNMA$OPTION_LAG1 * 4,0)/4
+FNMA$OPTIONCAT.GLENN <- cut(FNMA$OPTION.LAG, breaks=breaks,labels=breaklabel)
+FNMA$OPTIONCAT.GLENN <- ordered(FNMA$OPTIONCAT.GLENN, levels = c("0","-0.5","-0.25","0.25","0.5","0.75","1","1.25","1.5","1.75"))
+FNMA$SEASON.GLENN <- ordered(FNMA$SEASON, levels = c('Juni', 'Januar', 'Februar', 'März', 'April', 'Juli', 'August', 'September',
+                                                     'Oktober', 'November', 'Dezember'))
+FNMA$QUARTER.GLENN <- as.factor(ceiling(month(FNMA$MONTH)/3))
+FNMA$QUARTER.GLENN <- ordered(FNMA$QUARTER.GLENN, levels = c('2', '1', '3', '4'))
+
+
+
+FNMA$GLENN.STOP <- FNMA$Loan.Age
+FNMA$GLENN.START <- FNMA$Loan.Age - 1
+FNMA$GLENN.SEASONING <- ifelse(FNMA$Loan.Age >= 60, 'SEASONED', ifelse(FNMA$Loan.Age <= 30, 'NEW', 'MODERATE'))
+FNMA$GLENN.SEASONING <- factor(FNMA$GLENN.SEASONING, levels = c('NEW', 'MODERATE', 'SEASONED'))
+
+
+glennreg_1<-coxph(Surv(time = GLENN.START,time2 = GLENN.STOP,event = PREPAID, type = 'counting')~
+                  I(pspline(OPTION.GLENN, df = 5, Boundary.knots = c(-.25, 1.5)) * exp(-LoanAge * .0009)) + 
+                  QUARTER.GLENN, data= FNMA)
+
+glennreg_2<-coxph(Surv(time = GLENN.START,time2 = GLENN.STOP,event = PREPAID, type = 'counting')~
+                    OPTIONCAT.GLENN+
+                    QUARTER.GLENN , 
+                  data= FNMA)
